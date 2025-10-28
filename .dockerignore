@@ -1,0 +1,9 @@
+.git
+pycache/
+*.pyc
+.venv
+venv
+.DS_Store
+.vscode
+.env
+migrations/pycache/
