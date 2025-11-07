@@ -36,29 +36,46 @@ def _discover_db_uri() -> str | None:
     - POSTGRES_URI
     """
     keys = ["DATABASE_URL", "DATABASE_URI", "POSTGRES_URL", "POSTGRES_URI"]
+    from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
     for k in keys:
         v = os.environ.get(k)
         if v:
             # Normalizar esquema postgres:// a postgresql:// si es necesario
             if v.startswith("postgres://"):
                 v = "postgresql://" + v[len("postgres://"):]
-            # Asegurar sslmode=require para hosts de Neon si no está presente
+
+            # Parsear y reconstruir la URL de forma segura. Evita
+            # concatenaciones manuales que pueden generar cadenas
+            # como '?sslmode' sin clave/valor o values truncados.
             try:
-                from urllib.parse import urlparse, parse_qs, urlencode
                 parsed = urlparse(v)
-                if parsed.hostname and parsed.hostname.endswith(".neon.tech"):
-                    query = parse_qs(parsed.query)
-                    if "sslmode" not in query:
-                        sep = "&" if parsed.query else "?"
-                        v = v + f"{sep}sslmode=require"
+                scheme = parsed.scheme
+                netloc = parsed.netloc
+                path = parsed.path
+                params = parsed.params
+                query_items = dict(parse_qsl(parsed.query, keep_blank_values=True))
+
+                # Si el host es de Neon y no tenemos sslmode, añadirlo
+                host = parsed.hostname or ""
+                if host.endswith(".neon.tech") and "sslmode" not in query_items:
+                    query_items["sslmode"] = "require"
+
+                # Reconstruir query y URL completa
+                new_query = urlencode(query_items, doseq=True)
+                rebuilt = urlunparse((scheme, netloc, path, params, new_query, parsed.fragment))
+
+                print(f"Usando '{k}' para DB")
+                return rebuilt
             except Exception:
-                pass
-            print(f"Usando '{k}' para DB")
-            return v
+                # Si falla el parsing, retornar el valor tal cual — el chequeo
+                # posterior de la conexión mostrará el error real.
+                print(f"Usando '{k}' para DB (sin normalizar)")
+                return v
     return None
 
 DATABASE_URL = _discover_db_uri()
 if DATABASE_URL:
+    # Establecer la URI de SQLAlchemy correctamente
     app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
     # Evitar imprimir credenciales completas en logs
     try:
