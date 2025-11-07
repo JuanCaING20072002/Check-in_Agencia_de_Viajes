@@ -83,6 +83,13 @@ if DATABASE_URL:
         _p = urlparse(DATABASE_URL)
         redacted = f"{_p.scheme}://{_p.hostname}:{_p.port or ''}{_p.path}"
         print("DB URI:", redacted)
+        # Diagnostics (no secrets): indicar si la URI incluye credenciales y puerto
+        try:
+            has_user = bool(_p.username)
+            has_port = _p.port is not None
+            print(f"DB INFO: host={_p.hostname} has_user={has_user} has_port={has_port}")
+        except Exception:
+            pass
     except Exception:
         print("DB URI establecida desde entorno")
 else:
