@@ -1,4 +1,21 @@
+<<<<<<< HEAD
 .venv/
 __pycache__/
 *.pyc
 migrations/__pycache__/
+=======
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+
+# Local env files
+.env
+
+# Python
+*.log
