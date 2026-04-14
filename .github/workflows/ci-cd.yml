@@ -26,16 +26,16 @@ jobs:
           pip install -r requirements-dev.txt
       
       - name: Check imports with isort
-        run: ./.venv/bin/isort --check-only app.py || true
+        run: isort --check-only app.py || true
       
       - name: Check formatting with Black
-        run: ./.venv/bin/black --check app.py || true
+        run: black --check app.py || true
       
       - name: Lint with flake8
-        run: ./.venv/bin/flake8 app.py -- || true
+        run: flake8 app.py || true
       
       - name: Type checking with mypy
-        run: ./.venv/bin/mypy app.py --ignore-missing-imports || true
+        run: mypy app.py --ignore-missing-imports || true
 
   test:
     name: Unit Tests
@@ -76,7 +76,7 @@ jobs:
           FLASK_ENV: testing
           FLASK_SECRET_KEY: test-secret-key
         run: |
-          ./.venv/bin/pytest tests/ -v --cov=app --cov-report=xml
+          pytest tests/ -v --cov=app --cov-report=xml
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
