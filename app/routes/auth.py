@@ -1,31 +1,29 @@
 """Authentication routes."""
+from flask import flash, redirect, render_template, request, url_for
+from flask_login import login_user, logout_user
+
 from app.routes import auth_bp
+from app.services import auth_service, email_service
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     """Login route."""
-    from flask import flash, redirect, render_template, request, url_for
-    from flask_login import login_user
-
-    from app.models import Usuario
-
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
 
-        if not username or not password:
-            flash("Por favor proporciona usuario y contraseña.")
-            return redirect(url_for("auth.login"))
+        try:
+            usuario = auth_service.login(username, password)
 
-        usuario = Usuario.query.filter_by(username=username).first()
-
-        if usuario and usuario.check_password(password):
-            login_user(usuario)
-            flash(f"¡Bienvenido, {usuario.username}!")
-            return redirect(url_for("main.index"))
-        else:
-            flash("Usuario o contraseña inválidos.")
+            if usuario:
+                login_user(usuario)
+                flash(f"¡Bienvenido, {usuario.username}!")
+                return redirect(url_for("main.index"))
+            else:
+                flash("Usuario o contraseña inválidos.")
+        except ValueError as e:
+            flash(f"Error: {str(e)}")
 
     return render_template("login.html")
 
@@ -33,9 +31,6 @@ def login():
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     """Logout route."""
-    from flask import redirect, url_for
-    from flask_login import logout_user
-
     logout_user()
     return redirect(url_for("main.index"))
 
@@ -43,36 +38,32 @@ def logout():
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
     """Registration route."""
-    from flask import flash, redirect, render_template, request, url_for
-    from flask_login import login_user
-
-    from app.extensions import db
-    from app.models import Usuario
-
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
         password_confirm = request.form.get("password_confirm")
 
-        if not username or not password:
-            flash("Por favor completa todos los campos.")
+        try:
+            if not username or not password:
+                flash("Por favor completa todos los campos.")
+                return redirect(url_for("auth.register"))
+
+            if password != password_confirm:
+                flash("Las contraseñas no coinciden.")
+                return redirect(url_for("auth.register"))
+
+            # Use service to register
+            usuario = auth_service.create(username, password)
+
+            # Send welcome email
+            email_service.send_welcome_email(username, username)
+
+            login_user(usuario)
+            flash("¡Registro exitoso!")
+            return redirect(url_for("main.index"))
+
+        except ValueError as e:
+            flash(f"Error: {str(e)}")
             return redirect(url_for("auth.register"))
-
-        if password != password_confirm:
-            flash("Las contraseñas no coinciden.")
-            return redirect(url_for("auth.register"))
-
-        if Usuario.query.filter_by(username=username).first():
-            flash("El usuario ya existe.")
-            return redirect(url_for("auth.register"))
-
-        usuario = Usuario(username=username)
-        usuario.set_password(password)
-        db.session.add(usuario)
-        db.session.commit()
-
-        login_user(usuario)
-        flash("¡Registro exitoso!")
-        return redirect(url_for("main.index"))
 
     return render_template("register.html")

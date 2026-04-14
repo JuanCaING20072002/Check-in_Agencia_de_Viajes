@@ -1,50 +1,57 @@
 """Reservas routes."""
+from flask import flash, redirect, render_template, request, url_for
+from flask_login import login_required
+
 from app.routes import reservas_bp
+from app.services import reserva_service, viaje_service, email_service
 
 
 @reservas_bp.route("/", methods=["GET"])
+@login_required
 def listar():
     """List reservations."""
-    from flask import render_template
-    from flask_login import login_required
-
-    from app.models import Reserva
-
-    reservas = Reserva.query.all()
+    reservas = reserva_service.get_all()
     return render_template("reservas/listar.html", reservas=reservas)
 
 
 @reservas_bp.route("/nueva/<int:viaje_id>", methods=["GET", "POST"])
+@login_required
 def nueva(viaje_id: int):
     """Create new reservation."""
-    from flask import redirect, render_template, request, url_for, flash
+    viaje = viaje_service.get_by_id(viaje_id)
 
-    from app.extensions import db
-    from app.models import Reserva, Viaje
-
-    viaje = Viaje.query.get_or_404(viaje_id)
+    if not viaje:
+        flash("Viaje no encontrado.")
+        return redirect(url_for("viajes.listar"))
 
     if request.method == "POST":
         nombre = request.form.get("nombre")
         email = request.form.get("email")
-        fecha = request.form.get("fecha")
-        mensaje = request.form.get("mensaje")
+        fecha = request.form.get("fecha", "")
+        mensaje = request.form.get("mensaje", "")
 
-        if not nombre or not email:
-            flash("Por favor completa nombre y correo.")
+        try:
+            if not nombre or not email:
+                flash("Por favor completa nombre y correo.")
+                return redirect(url_for("reservas.nueva", viaje_id=viaje_id))
+
+            # Create reservation using service
+            reserva = reserva_service.create(
+                nombre=nombre,
+                email=email,
+                fecha=fecha,
+                mensaje=mensaje,
+                viaje_id=viaje_id,
+            )
+
+            # Send confirmation email
+            email_service.send_reservation_confirmation(email, nombre, viaje.nombre)
+
+            flash("¡Reserva creada exitosamente!")
+            return redirect(url_for("viajes.listar"))
+
+        except ValueError as e:
+            flash(f"Error: {str(e)}")
             return redirect(url_for("reservas.nueva", viaje_id=viaje_id))
-
-        reserva = Reserva(
-            nombre=nombre,
-            email=email,
-            fecha=fecha or "",
-            mensaje=mensaje or "",
-            viaje_id=viaje_id,
-        )
-        db.session.add(reserva)
-        db.session.commit()
-
-        flash("¡Reserva creada exitosamente!")
-        return redirect(url_for("viajes.listar"))
 
     return render_template("reservas/nueva.html", viaje=viaje)
