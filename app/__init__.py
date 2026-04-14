@@ -1,4 +1,5 @@
 """Flask application factory."""
+
 import os
 
 from flask import Flask
@@ -12,10 +13,10 @@ from app.models import Reserva, Usuario, Viaje
 def create_app(config_name: str = None) -> Flask:
     """
     Create and configure the Flask application.
-    
+
     Args:
         config_name: Configuration class name ('development', 'testing', 'production')
-        
+
     Returns:
         Configured Flask app instance
     """

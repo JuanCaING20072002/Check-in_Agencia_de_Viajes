@@ -2,6 +2,7 @@
 Application configuration module.
 Handles different environments: development, testing, production.
 """
+
 import os
 from datetime import timedelta
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -50,7 +51,7 @@ class Config:
             if db_url:
                 # Normalize postgres:// to postgresql://
                 if db_url.startswith("postgres://"):
-                    db_url = "postgresql://" + db_url[len("postgres://"):]
+                    db_url = "postgresql://" + db_url[len("postgres://") :]
 
                 # Parse and rebuild URL safely
                 try:
@@ -59,22 +60,15 @@ class Config:
                     netloc = parsed.netloc
                     path = parsed.path
                     params = parsed.params
-                    query_items = dict(
-                        parse_qsl(parsed.query, keep_blank_values=True)
-                    )
+                    query_items = dict(parse_qsl(parsed.query, keep_blank_values=True))
 
                     # Add sslmode for cloud providers (e.g., Neon)
                     hostname = parsed.hostname or ""
-                    if (
-                        hostname.endswith(".neon.tech")
-                        and "sslmode" not in query_items
-                    ):
+                    if hostname.endswith(".neon.tech") and "sslmode" not in query_items:
                         query_items["sslmode"] = "require"
 
                     new_query = urlencode(query_items, doseq=True)
-                    rebuilt = urlunparse(
-                        (scheme, netloc, path, params, new_query, parsed.fragment)
-                    )
+                    rebuilt = urlunparse((scheme, netloc, path, params, new_query, parsed.fragment))
                     return rebuilt
                 except Exception:
                     return db_url
@@ -86,9 +80,7 @@ class Config:
         db_port = os.environ.get("POSTGRES_PORT", "5432")
         db_name = os.environ.get("POSTGRES_DB", "reservasdb")
 
-        return (
-            f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
-        )
+        return f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
 
 
 class DevelopmentConfig(Config):
@@ -121,11 +113,11 @@ class ProductionConfig(Config):
 def get_config():
     """Get configuration object based on FLASK_ENV."""
     env = os.environ.get("FLASK_ENV", "development").lower()
-    
+
     config_map = {
         "development": DevelopmentConfig,
         "testing": TestingConfig,
         "production": ProductionConfig,
     }
-    
+
     return config_map.get(env, DevelopmentConfig)

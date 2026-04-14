@@ -1,4 +1,5 @@
 """Viaje model."""
+
 from decimal import Decimal
 
 from app.extensions import db
