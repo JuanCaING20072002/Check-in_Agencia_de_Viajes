@@ -1,9 +1,10 @@
 """Reservas routes."""
+
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app.routes import reservas_bp
-from app.services import reserva_service, viaje_service, email_service
+from app.services import email_service, reserva_service, viaje_service
 
 
 @reservas_bp.route("/", methods=["GET"])

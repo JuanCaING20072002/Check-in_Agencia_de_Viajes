@@ -3,6 +3,9 @@ import os
 
 import pytest
 
+# Set Flask environment to testing before importing app
+os.environ["FLASK_ENV"] = "testing"
+
 from app import create_app
 from app.extensions import db as database
 from app.models import Reserva, Usuario, Viaje

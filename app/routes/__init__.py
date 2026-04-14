@@ -1,4 +1,5 @@
 """Routes/Blueprints module."""
+
 from flask import Blueprint
 
 # Initialize blueprints

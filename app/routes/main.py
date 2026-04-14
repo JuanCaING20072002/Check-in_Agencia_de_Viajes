@@ -1,4 +1,5 @@
 """Main routes."""
+
 from flask import render_template
 
 from app.routes import main_bp
@@ -29,6 +30,4 @@ def enviar_respuesta():
         flash("Por favor completa nombre y correo.")
         return redirect(url_for("main.index"))
 
-    return render_template(
-        "gracias.html", nombre=nombre, email=email, experiencias=experiencias
-    )
+    return render_template("gracias.html", nombre=nombre, email=email, experiencias=experiencias)

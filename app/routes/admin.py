@@ -1,15 +1,17 @@
 """Admin routes - requires admin role."""
+
 from functools import wraps
 
 from flask import abort, render_template
 from flask_login import current_user
 
 from app.routes import admin_bp
-from app.services import viaje_service, auth_service, reserva_service
+from app.services import auth_service, reserva_service, viaje_service
 
 
 def admin_required(f):
     """Decorator to require admin role."""
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or not current_user.is_admin():
