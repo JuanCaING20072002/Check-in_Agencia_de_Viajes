@@ -1,0 +1,21 @@
+[MASTER]
+ignore-patterns=test_.*?\.py
+jobs=0
+max-nested-blocks=5
+
+[DESIGN]
+max-args=5
+max-attributes=7
+
+[FORMAT]
+max-line-length=100
+
+[BASIC]
+good-names=i,j,k,ex,Run,_,app,f,db
+
+[MESSAGES CONTROL]
+disable=
+    missing-docstring,
+    too-few-public-methods,
+    line-too-long,
+    protected-access,
