@@ -1,0 +1,8 @@
+# Ver logs de la app
+sudo docker-compose -f /home/andres_yule/Aplicaciones/Check-in_Agencia_de_Viajes/docker-compose.yml logs viajes_web
+
+# Detener la app
+sudo docker-compose -f /home/andres_yule/Aplicaciones/Check-in_Agencia_de_Viajes/docker-compose.yml down
+
+# Reiniciar
+sudo docker-compose -f /home/andres_yule/Aplicaciones/Check-in_Agencia_de_Viajes/docker-compose.yml restart

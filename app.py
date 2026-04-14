@@ -1,16 +1,32 @@
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
-from functools import wraps
-from flask import abort
-from flask_login import current_user
-from flask_migrate import Migrate
 import os
 import smtplib
 from email.message import EmailMessage
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from functools import wraps
+
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.exc import OperationalError
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 # Secret key: require it in non-development environments to avoid weak defaults
@@ -21,7 +37,9 @@ if not FLASK_SECRET_KEY:
     if os.environ.get("FLASK_ENV", "production") == "development":
         app.secret_key = "dev-secret-key"
     else:
-        raise RuntimeError("FLASK_SECRET_KEY is not set. Set it in the environment before starting the app.")
+        raise RuntimeError(
+            "FLASK_SECRET_KEY is not set. Set it in the environment before starting the app."
+        )
 else:
     app.secret_key = FLASK_SECRET_KEY
 
@@ -37,13 +55,14 @@ def _discover_db_uri() -> str | None:
     - POSTGRES_URI
     """
     keys = ["DATABASE_URL", "DATABASE_URI", "POSTGRES_URL", "POSTGRES_URI"]
-    from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
     for k in keys:
         v = os.environ.get(k)
         if v:
             # Normalizar esquema postgres:// a postgresql:// si es necesario
             if v.startswith("postgres://"):
-                v = "postgresql://" + v[len("postgres://"):]
+                v = "postgresql://" + v[len("postgres://") :]
 
             # Parsear y reconstruir la URL de forma segura. Evita
             # concatenaciones manuales que pueden generar cadenas
@@ -74,6 +93,7 @@ def _discover_db_uri() -> str | None:
                 return v
     return None
 
+
 DATABASE_URL = _discover_db_uri()
 if DATABASE_URL:
     # Establecer la URI de SQLAlchemy correctamente
@@ -81,6 +101,7 @@ if DATABASE_URL:
     # Evitar imprimir credenciales completas en logs
     try:
         from urllib.parse import urlparse
+
         _p = urlparse(DATABASE_URL)
         redacted = f"{_p.scheme}://{_p.hostname}:{_p.port or ''}{_p.path}"
         print("DB URI:", redacted)
@@ -107,47 +128,53 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # Engine options: enable pool_pre_ping to detect/reconnect dead connections
 # and set reasonable pool sizing. This helps avoid 'psycopg2.OperationalError: SSL connection closed unexpectedly'
 # which commonly happens when a pooled connection was closed by the server/network.
-app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})
-engine_opts = app.config['SQLALCHEMY_ENGINE_OPTIONS']
+app.config.setdefault("SQLALCHEMY_ENGINE_OPTIONS", {})
+engine_opts = app.config["SQLALCHEMY_ENGINE_OPTIONS"]
 # Don't overwrite if already set by environment or other code; merge sensible defaults.
-engine_opts.setdefault('pool_pre_ping', True)
-engine_opts.setdefault('pool_size', int(os.environ.get('SQLALCHEMY_POOL_SIZE', 5)))
-engine_opts.setdefault('max_overflow', int(os.environ.get('SQLALCHEMY_MAX_OVERFLOW', 10)))
-engine_opts.setdefault('pool_recycle', int(os.environ.get('SQLALCHEMY_POOL_RECYCLE', 1800)))
+engine_opts.setdefault("pool_pre_ping", True)
+engine_opts.setdefault("pool_size", int(os.environ.get("SQLALCHEMY_POOL_SIZE", 5)))
+engine_opts.setdefault("max_overflow", int(os.environ.get("SQLALCHEMY_MAX_OVERFLOW", 10)))
+engine_opts.setdefault("pool_recycle", int(os.environ.get("SQLALCHEMY_POOL_RECYCLE", 1800)))
 # If the DATABASE_URL didn't include sslmode, ensure psycopg2 uses require as a fallback
 # (connect_args is accepted by SQLAlchemy create_engine and passed to psycopg2).
-connect_args = engine_opts.get('connect_args', {})
-if 'sslmode' not in connect_args:
+connect_args = engine_opts.get("connect_args", {})
+if "sslmode" not in connect_args:
     # If DATABASE_URL already contains sslmode via query string, psycopg2 will use it; this just ensures a fallback.
-    connect_args.setdefault('sslmode', 'require')
-engine_opts['connect_args'] = connect_args
+    connect_args.setdefault("sslmode", "require")
+engine_opts["connect_args"] = connect_args
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 login_manager = LoginManager(app)
-login_manager.login_view = 'login'
+login_manager.login_view = "login"
 
 
 @app.errorhandler(OperationalError)
 def handle_db_operational_error(e):
     # Log full exception; return a 503 so clients know it's a temporary service issue
     app.logger.exception("OperationalError caught by errorhandler: %s", e)
-    return ("Servicio temporalmente no disponible por problemas con la base de datos. Por favor intenta más tarde.", 503)
+    return (
+        "Servicio temporalmente no disponible por problemas con la base de datos. Por favor intenta más tarde.",
+        503,
+    )
+
 
 # Security-related cookie settings
 app.config.update(
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SAMESITE="Lax",
     REMEMBER_COOKIE_SECURE=True,
-    REMEMBER_COOKIE_HTTPONLY=True
+    REMEMBER_COOKIE_HTTPONLY=True,
 )
+
 
 # Healthcheck simple para proveedores de despliegue
 @app.get("/health")
 def health():
     return {"status": "ok"}, 200
+
 
 # Configuración de correo (Gmail)
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -158,8 +185,10 @@ SMTP_PASS = os.environ.get("SMTP_PASS", "")  # App Password de Gmail
 # Serializer para tokens de recuperación
 RESET_TOKEN_SALT = os.environ.get("RESET_TOKEN_SALT", "reset-password-salt")
 
+
 def _get_serializer():
     return URLSafeTimedSerializer(app.secret_key)
+
 
 def send_reset_email(usuario, reset_url):
     if not SMTP_USER or not SMTP_PASS:
@@ -193,16 +222,18 @@ def send_reset_email(usuario, reset_url):
         print("Error enviando correo:", e)
         return False
 
+
 class Reserva(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), nullable=False)
     fecha = db.Column(db.String(20), nullable=False)
     mensaje = db.Column(db.Text, nullable=True)
-    viaje_id = db.Column(db.Integer, db.ForeignKey('viaje.id'), nullable=False)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
-    viaje = db.relationship('Viaje', backref=db.backref('reservas', lazy=True))
-    usuario = db.relationship('Usuario', backref='reservas')
+    viaje_id = db.Column(db.Integer, db.ForeignKey("viaje.id"), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuario.id"))
+    viaje = db.relationship("Viaje", backref=db.backref("reservas", lazy=True))
+    usuario = db.relationship("Usuario", backref="reservas")
+
 
 # Modelo para viajes
 class Viaje(db.Model):
@@ -210,20 +241,23 @@ class Viaje(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     descripcion = db.Column(db.Text, nullable=False)
     fecha = db.Column(db.String(20), nullable=True)
-    precio = db.Column(db.Numeric(10,2), nullable=True)
+    precio = db.Column(db.Numeric(10, 2), nullable=True)
     imagen = db.Column(db.String(200), nullable=True)  # nombre de archivo de la imagen
+
 
 # models.py o en tu app.py si tienes todo junto
 class Usuario(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    rol = db.Column(db.String(20), nullable=False, default='usuario')  # 'usuario' o 'admin'
+    rol = db.Column(db.String(20), nullable=False, default="usuario")  # 'usuario' o 'admin'
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
+
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -238,13 +272,15 @@ def load_user(user_id):
         app.logger.exception("Unexpected error in load_user: %s", e)
         return None
 
+
 # Ruta para la página principal
 @app.route("/")
 def index():
     return render_template("index.html")
 
+
 # Ruta para manejar el formulario
-@app.route("/enviar-respuesta", methods=["POST"]) 
+@app.route("/enviar-respuesta", methods=["POST"])
 def enviar_respuesta():
     nombre = request.form.get("nombre")
     email = request.form.get("email")
@@ -256,37 +292,41 @@ def enviar_respuesta():
 
     return render_template("gracias.html", nombre=nombre, email=email, experiencias=experiencias)
 
+
 # Servir archivos desde la carpeta 'img' existente en la raíz del proyecto
-@app.route('/img/<path:filename>')
+@app.route("/img/<path:filename>")
 def img(filename):
-    img_dir = os.path.join(app.root_path, 'img')
+    img_dir = os.path.join(app.root_path, "img")
     return send_from_directory(img_dir, filename)
 
 
 # CRUD de viajes
-from werkzeug.utils import secure_filename
+UPLOAD_FOLDER = os.path.join("static", "img")
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp"}
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-UPLOAD_FOLDER = os.path.join('static', 'img')
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @app.route("/viajes")
 def listar_viajes():
     viajes = Viaje.query.all()
     return render_template("viajes/listar.html", viajes=viajes)
 
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.rol != 'admin':
+        if not current_user.is_authenticated or current_user.rol != "admin":
             abort(403)
         return f(*args, **kwargs)
+
     return decorated_function
 
-@app.route('/viajes/nuevo', methods=['GET', 'POST'])
+
+@app.route("/viajes/nuevo", methods=["GET", "POST"])
 @admin_required
 def nuevo_viaje():
     # solo admin
@@ -301,12 +341,19 @@ def nuevo_viaje():
             filename = secure_filename(imagen.filename)
             imagen.save(os.path.join(app.root_path, UPLOAD_FOLDER, filename))
             imagen_filename = filename
-        viaje = Viaje(nombre=nombre, descripcion=descripcion, fecha=fecha, precio=precio, imagen=imagen_filename)
+        viaje = Viaje(
+            nombre=nombre,
+            descripcion=descripcion,
+            fecha=fecha,
+            precio=precio,
+            imagen=imagen_filename,
+        )
         db.session.add(viaje)
         db.session.commit()
         flash("Viaje creado exitosamente.")
         return redirect(url_for("listar_viajes"))
     return render_template("viajes/nuevo.html")
+
 
 @app.route("/viajes/<int:id>/editar", methods=["GET", "POST"])
 @admin_required
@@ -327,6 +374,7 @@ def editar_viaje(id):
         return redirect(url_for("listar_viajes"))
     return render_template("viajes/editar.html", viaje=viaje)
 
+
 @app.route("/viajes/<int:id>/eliminar", methods=["POST"])
 @admin_required
 def eliminar_viaje(id):
@@ -336,24 +384,28 @@ def eliminar_viaje(id):
     flash("Viaje eliminado.")
     return redirect(url_for("listar_viajes"))
 
+
 @app.route("/galeria")
 def galeria():
     return render_template("galeria.html")
+
 
 @app.route("/nosotros")
 def nosotros():
     return render_template("nosotros.html")
 
+
 @app.route("/reservas")
 @login_required
 def listar_reservas():
-    if current_user.rol == 'admin':
+    if current_user.rol == "admin":
         reservas = Reserva.query.all()
     else:
         reservas = Reserva.query.filter_by(usuario_id=current_user.id).all()
-    return render_template('reservas/listar.html', reservas=reservas)
+    return render_template("reservas/listar.html", reservas=reservas)
 
-@app.route('/reservas/nueva', methods=['GET', 'POST'])
+
+@app.route("/reservas/nueva", methods=["GET", "POST"])
 @login_required
 def nueva_reserva():
     # solo usuario autenticado
@@ -362,7 +414,9 @@ def nueva_reserva():
     # Chequeo de límite antes de mostrar el formulario
     total_usuario = Reserva.query.filter_by(usuario_id=current_user.id).count()
     if total_usuario >= LIMITE_RESERVAS_POR_USUARIO:
-        flash(f"Has alcanzado el límite de {LIMITE_RESERVAS_POR_USUARIO} reservas. Cancela alguna para crear una nueva.")
+        flash(
+            f"Has alcanzado el límite de {LIMITE_RESERVAS_POR_USUARIO} reservas. Cancela alguna para crear una nueva."
+        )
         return redirect(url_for("listar_reservas"))
 
     viajes = Viaje.query.all()
@@ -370,7 +424,9 @@ def nueva_reserva():
         # Revalidar por seguridad antes de insertar
         total_usuario = Reserva.query.filter_by(usuario_id=current_user.id).count()
         if total_usuario >= LIMITE_RESERVAS_POR_USUARIO:
-            flash(f"Has alcanzado el límite de {LIMITE_RESERVAS_POR_USUARIO} reservas. Cancela alguna para crear una nueva.")
+            flash(
+                f"Has alcanzado el límite de {LIMITE_RESERVAS_POR_USUARIO} reservas. Cancela alguna para crear una nueva."
+            )
             return redirect(url_for("listar_reservas"))
 
         nombre = request.form["nombre"]
@@ -398,7 +454,7 @@ def nueva_reserva():
             fecha=fecha,
             mensaje=mensaje,
             viaje_id=viaje_id,
-            usuario_id=current_user.id
+            usuario_id=current_user.id,
         )
         db.session.add(reserva)
         db.session.commit()
@@ -406,11 +462,12 @@ def nueva_reserva():
         return redirect(url_for("listar_reservas"))
     return render_template("reservas/nueva.html", viajes=viajes)
 
+
 @app.route("/reservas/<int:id>/editar", methods=["GET", "POST"])
 @login_required
 def editar_reserva(id):
     reserva = Reserva.query.get_or_404(id)
-    if reserva.usuario_id != current_user.id and current_user.rol != 'admin':
+    if reserva.usuario_id != current_user.id and current_user.rol != "admin":
         abort(403)
     viajes = Viaje.query.all()
     if request.method == "POST":
@@ -421,22 +478,22 @@ def editar_reserva(id):
         nuevo_mensaje = request.form.get("mensaje")
 
         # Validación: evitar duplicar fecha con otra reserva del mismo usuario
-        conflicto = (Reserva.query
-                     .filter(Reserva.usuario_id == reserva.usuario_id,
-                             Reserva.fecha == nueva_fecha,
-                             Reserva.id != reserva.id)
-                     .first())
+        conflicto = Reserva.query.filter(
+            Reserva.usuario_id == reserva.usuario_id,
+            Reserva.fecha == nueva_fecha,
+            Reserva.id != reserva.id,
+        ).first()
         if conflicto:
             flash("Ya existe otra reserva tuya para esa fecha. Usa una fecha distinta.")
             return redirect(url_for("editar_reserva", id=reserva.id))
 
         # Validación adicional: mismo viaje + misma fecha en otra reserva
-        conflicto_viaje_fecha = (Reserva.query
-                                 .filter(Reserva.usuario_id == reserva.usuario_id,
-                                         Reserva.viaje_id == nuevo_viaje_id,
-                                         Reserva.fecha == nueva_fecha,
-                                         Reserva.id != reserva.id)
-                                 .first())
+        conflicto_viaje_fecha = Reserva.query.filter(
+            Reserva.usuario_id == reserva.usuario_id,
+            Reserva.viaje_id == nuevo_viaje_id,
+            Reserva.fecha == nueva_fecha,
+            Reserva.id != reserva.id,
+        ).first()
         if conflicto_viaje_fecha:
             flash("Ya tienes otra reserva para ese mismo viaje en esa fecha.")
             return redirect(url_for("editar_reserva", id=reserva.id))
@@ -451,153 +508,171 @@ def editar_reserva(id):
         return redirect(url_for("listar_reservas"))
     return render_template("reservas/editar.html", reserva=reserva, viajes=viajes)
 
+
 @app.route("/reservas/<int:id>/eliminar", methods=["POST"])
 @login_required
 def eliminar_reserva(id):
     reserva = Reserva.query.get_or_404(id)
-    if reserva.usuario_id != current_user.id and current_user.rol != 'admin':
+    if reserva.usuario_id != current_user.id and current_user.rol != "admin":
         abort(403)
     db.session.delete(reserva)
     db.session.commit()
     flash("Reserva eliminada.")
     return redirect(url_for("listar_reservas"))
 
+
 @app.route("/viajes/<int:id>")
 def detalle_viaje(id):
     viaje = Viaje.query.get_or_404(id)
     return render_template("viajes/detalle.html", viaje=viaje)
 
+
 @app.route("/prueba")
 def prueba():
     return render_template("prueba.html")
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        usuario = Usuario.query.filter_by(username=request.form['username']).first()
-        if usuario and usuario.check_password(request.form['password']):
-            login_user(usuario)
-            flash('Bienvenido, {}'.format(usuario.username))
-            return redirect(url_for('dashboard' if usuario.rol == 'admin' else 'index'))
-        flash('Usuario o contraseña incorrectos')
-    return render_template('login.html')
 
-@app.route('/logout')
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        usuario = Usuario.query.filter_by(username=request.form["username"]).first()
+        if usuario and usuario.check_password(request.form["password"]):
+            login_user(usuario)
+            flash("Bienvenido, {}".format(usuario.username))
+            return redirect(url_for("dashboard" if usuario.rol == "admin" else "index"))
+        flash("Usuario o contraseña incorrectos")
+    return render_template("login.html")
+
+
+@app.route("/logout")
 @login_required
 def logout():
     logout_user()
-    flash('Sesión cerrada')
-    return redirect(url_for('index'))
+    flash("Sesión cerrada")
+    return redirect(url_for("index"))
 
-@app.route('/dashboard')
+
+@app.route("/dashboard")
 @admin_required
 def dashboard():
     total_viajes = Viaje.query.count()
     total_reservas = Reserva.query.count()
     total_usuarios = Usuario.query.count()
     ultimas_reservas = Reserva.query.order_by(Reserva.id.desc()).limit(5).all()
-    return render_template('admin/dashboard.html',
-                           total_viajes=total_viajes,
-                           total_reservas=total_reservas,
-                           total_usuarios=total_usuarios,
-                           ultimas_reservas=ultimas_reservas)
+    return render_template(
+        "admin/dashboard.html",
+        total_viajes=total_viajes,
+        total_reservas=total_reservas,
+        total_usuarios=total_usuarios,
+        ultimas_reservas=ultimas_reservas,
+    )
 
-@app.route('/register', methods=['GET', 'POST'])
+
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-        confirm_password = request.form['confirm_password']
+    if request.method == "POST":
+        username = request.form["username"]
+        email = request.form["email"]
+        password = request.form["password"]
+        confirm_password = request.form["confirm_password"]
 
         # Validaciones básicas
         if not username or not email or not password or not confirm_password:
-            flash('Por favor completa todos los campos.')
-            return render_template('register.html')
+            flash("Por favor completa todos los campos.")
+            return render_template("register.html")
         if password != confirm_password:
-            flash('Las contraseñas no coinciden.')
-            return render_template('register.html')
+            flash("Las contraseñas no coinciden.")
+            return render_template("register.html")
         if Usuario.query.filter_by(username=username).first():
-            flash('El usuario ya existe.')
-            return render_template('register.html')
+            flash("El usuario ya existe.")
+            return render_template("register.html")
 
         # Crear usuario
-        nuevo_usuario = Usuario(username=username, rol='usuario')
+        nuevo_usuario = Usuario(username=username, rol="usuario")
         nuevo_usuario.set_password(password)
         db.session.add(nuevo_usuario)
         db.session.commit()
-        flash('¡Registro exitoso! Ahora puedes iniciar sesión.')
-        return redirect(url_for('login'))
+        flash("¡Registro exitoso! Ahora puedes iniciar sesión.")
+        return redirect(url_for("login"))
 
-    return render_template('register.html')
+    return render_template("register.html")
 
-@app.route('/forgot-password', methods=['GET', 'POST'])
+
+@app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    if request.method == 'POST':
-        email = request.form['email'].strip().lower()
+    if request.method == "POST":
+        email = request.form["email"].strip().lower()
         # En este sistema, el username es el correo registrado
         usuario = Usuario.query.filter_by(username=email).first()
         if usuario:
             s = _get_serializer()
             token = s.dumps({"uid": usuario.id}, salt=RESET_TOKEN_SALT)
-            reset_url = url_for('reset_password', token=token, _external=True)
+            reset_url = url_for("reset_password", token=token, _external=True)
             send_reset_email(usuario, reset_url)
     # Mensaje flash neutro para no revelar si el correo existe o no
-    flash('Si tu correo está registrado, te enviamos un enlace para restablecer tu contraseña.')
+    flash("Si tu correo está registrado, te enviamos un enlace para restablecer tu contraseña.")
     # Mensaje/página genérica para no revelar existencia del correo
-    return redirect(url_for('forgot_password_sent'))
+    return redirect(url_for("forgot_password_sent"))
     # GET: mostrar formulario para digitar correo
-    return render_template('forgot_password.html')
+    return render_template("forgot_password.html")
 
-@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
     s = _get_serializer()
     try:
         data = s.loads(token, max_age=3600, salt=RESET_TOKEN_SALT)  # 1 hora
-        user_id = data.get('uid')
+        user_id = data.get("uid")
     except (BadSignature, SignatureExpired):
-        flash('El enlace de restablecimiento no es válido o ha expirado.')
-        return redirect(url_for('login'))
+        flash("El enlace de restablecimiento no es válido o ha expirado.")
+        return redirect(url_for("login"))
 
     usuario = Usuario.query.get_or_404(user_id)
-    if request.method == 'POST':
-        password = request.form.get('password')
-        confirm = request.form.get('confirm_password')
+    if request.method == "POST":
+        password = request.form.get("password")
+        confirm = request.form.get("confirm_password")
         if not password or not confirm:
-            flash('Completa ambos campos.')
-            return render_template('reset_password.html')
+            flash("Completa ambos campos.")
+            return render_template("reset_password.html")
         if password != confirm:
-            flash('Las contraseñas no coinciden.')
-            return render_template('reset_password.html')
+            flash("Las contraseñas no coinciden.")
+            return render_template("reset_password.html")
         if len(password) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.')
-            return render_template('reset_password.html')
+            flash("La contraseña debe tener al menos 6 caracteres.")
+            return render_template("reset_password.html")
         usuario.set_password(password)
         db.session.commit()
-        flash('Tu contraseña ha sido restablecida. Ahora puedes iniciar sesión.')
-        return redirect(url_for('login'))
-    return render_template('reset_password.html')
+        flash("Tu contraseña ha sido restablecida. Ahora puedes iniciar sesión.")
+        return redirect(url_for("login"))
+    return render_template("reset_password.html")
 
-@app.route('/forgot-password/sent')
+
+@app.route("/forgot-password/sent")
 def forgot_password_sent():
     # Página simple de confirmación
-    return render_template('forgot_password_sent.html')
+    return render_template("forgot_password_sent.html")
 
-@app.route('/usuarios')
+
+@app.route("/usuarios")
 @admin_required
 def listar_usuarios():
     usuarios = Usuario.query.all()
-    return render_template('admin/usuarios.html', usuarios=usuarios)
+    return render_template("admin/usuarios.html", usuarios=usuarios)
 
-@app.route('/admin/viajes/<int:id>')
+
+@app.route("/admin/viajes/<int:id>")
 @admin_required
 def admin_detalle_viaje(id):
     viaje = Viaje.query.get_or_404(id)
-    return render_template('admin/viajes/detalle.html', viaje=viaje)
+    return render_template("admin/viajes/detalle.html", viaje=viaje)
+
 
 # Only create DB tables automatically in development or when explicitly requested.
 # Production should rely on Alembic migrations (flask db upgrade).
-if os.environ.get("FLASK_ENV", "production") == "development" or os.environ.get("FLASK_RUN_CREATE_ALL", "0") == "1":
+if (
+    os.environ.get("FLASK_ENV", "production") == "development"
+    or os.environ.get("FLASK_RUN_CREATE_ALL", "0") == "1"
+):
     with app.app_context():
         db.create_all()
 

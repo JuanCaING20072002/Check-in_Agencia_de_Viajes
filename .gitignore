@@ -1,21 +1,50 @@
-<<<<<<< HEAD
+# Virtual environments
 .venv/
-__pycache__/
-*.pyc
-migrations/__pycache__/
-=======
-# Python
+venv/
+env/
+ENV/
+
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
 
-# Environments
-.venv/
-venv/
-ENV/
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
 
-# Local env files
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
 .env
+.env.local
 
-# Python
+# Logs
 *.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Migrations cache
+migrations/__pycache__/
+
+# Node
+node_modules/
+package-lock.json
+
